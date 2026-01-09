@@ -1,0 +1,22 @@
+app = "laboratoria-stream"
+primary_region = "iad"
+
+[build]
+
+[[services]]
+  internal_port = 3000
+  protocol = "tcp"
+  
+  [[services.ports]]
+    port = 3000
+    handlers = ["http"]
+    
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.http_checks]]
+    interval = 10000
+    timeout = 2000
+    method = "GET"
+    path = "/"
