@@ -1,0 +1,16 @@
+{
+  "name": "laboratoria-stream-server",
+  "version": "1.0.0",
+  "description": "WebRTC signaling server for Laboratoria app",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "ws": "^8.14.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
