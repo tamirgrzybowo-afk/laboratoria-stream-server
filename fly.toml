@@ -4,11 +4,11 @@ primary_region = "iad"
 [build]
 
 [[services]]
-  internal_port = 3000
+  internal_port = 5000
   protocol = "tcp"
   
   [[services.ports]]
-    port = 3000
+    port = 5000
     handlers = ["http"]
     
   [[services.ports]]
