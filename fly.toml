@@ -1,14 +1,17 @@
-app = "laboratoria-stream"
+app = "laboratoria-stream-server"
 primary_region = "iad"
 
 [build]
+  builder = "paketobuildpacks/builder:base"
 
 [[services]]
-  internal_port = 5000
+  http_checks = []
+  internal_port = 8080
   protocol = "tcp"
+  processes = ["app"]
   
   [[services.ports]]
-    port = 5000
+    port = 80
     handlers = ["http"]
     
   [[services.ports]]
@@ -16,7 +19,15 @@ primary_region = "iad"
     handlers = ["tls", "http"]
 
   [[services.http_checks]]
-    interval = 10000
-    timeout = 2000
-    method = "GET"
-    path = "/"
+    grace_period = "1s"
+    interval = "15s"
+    method = "get"
+    path = "/health"
+    protocol = "http"
+    restart_limit = 0
+    timeout = "2s"
+    tls_skip_verify = false
+
+[http_service]
+  force_https = true
+  internal_port = 8080
