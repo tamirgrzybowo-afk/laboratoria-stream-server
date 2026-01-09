@@ -1,16 +1,24 @@
 {
   "name": "laboratoria-stream-server",
-  "version": "1.0.0",
-  "description": "WebRTC signaling server for Laboratoria app",
+  "version": "2.0.0",
+  "description": "WebRTC signaling server for Laboratoria Android streaming app",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "test": "echo \"No tests specified\" && exit 0"
   },
+  "keywords": ["webrtc", "signaling", "android", "streaming"],
+  "author": "Laboratoria",
+  "license": "MIT",
   "dependencies": {
     "ws": "^8.14.2"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tamingrzybowo-afk/laboratoria-stream-server"
   }
 }
