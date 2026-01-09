@@ -1,95 +1,129 @@
 const WebSocket = require('ws');
-const server = new WebSocket.Server({ port: process.env.PORT || 5000 });
+const http = require('http');
 
-console.log('🚀 Laboratoria WebRTC Server started on port', process.env.PORT || 5000);
+// Создаем HTTP сервер для health checks
+const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', service: 'webrtc-signal', timestamp: new Date().toISOString() }));
+    } else {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('✅ Laboratoria WebRTC Signaling Server\n\nEndpoints:\n- GET /health - Health check\n- WS / - WebSocket signaling');
+    }
+});
 
-let broadcaster = null;
-const viewers = new Set();
+// Запускаем WebSocket на том же сервере
+const wss = new WebSocket.Server({ server });
 
-server.on('connection', (ws) => {
-    console.log('🔗 New connection');
+console.log('🚀 Laboratoria WebRTC Server starting...');
+
+let phoneConnection = null;
+let browserConnection = null;
+
+wss.on('connection', (ws, req) => {
+    console.log('🔗 New WebSocket connection from:', req.socket.remoteAddress);
     
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
-            console.log('📨 Received:', data.type);
+            console.log('📨 Received type:', data.type);
             
             if (data.type === 'phone') {
-                broadcaster = ws;
+                phoneConnection = ws;
                 ws.send(JSON.stringify({ 
                     type: 'registered', 
-                    role: 'broadcaster',
-                    message: 'Phone connected successfully' 
+                    role: 'phone',
+                    message: '📱 Phone connected successfully. Ready for streaming.',
+                    timestamp: new Date().toISOString()
                 }));
                 console.log('📱 Phone registered as broadcaster');
             }
             else if (data.type === 'browser') {
-                viewers.add(ws);
+                browserConnection = ws;
                 ws.send(JSON.stringify({ 
                     type: 'registered', 
-                    role: 'viewer',
-                    message: 'Browser ready to receive stream' 
+                    role: 'browser',
+                    message: '💻 Browser connected. Waiting for video stream...',
+                    timestamp: new Date().toISOString()
                 }));
-                console.log('💻 Browser registered as viewer. Total:', viewers.size);
+                console.log('💻 Browser registered as viewer');
             }
             else if (data.type === 'offer') {
-                // Forward offer to all viewers
-                viewers.forEach(viewer => {
-                    if (viewer.readyState === WebSocket.OPEN) {
-                        viewer.send(JSON.stringify({
-                            type: 'offer',
-                            sdp: data.sdp
-                        }));
-                        console.log('📤 Forwarded offer to viewer');
-                    }
-                });
+                if (browserConnection && browserConnection.readyState === 1) {
+                    browserConnection.send(JSON.stringify({
+                        type: 'offer',
+                        sdp: data.sdp,
+                        from: 'phone',
+                        timestamp: new Date().toISOString()
+                    }));
+                    console.log('📤 Forwarded SDP offer to browser');
+                }
             }
             else if (data.type === 'answer') {
-                // Forward answer to broadcaster
-                if (broadcaster && broadcaster.readyState === WebSocket.OPEN) {
-                    broadcaster.send(JSON.stringify({
+                if (phoneConnection && phoneConnection.readyState === 1) {
+                    phoneConnection.send(JSON.stringify({
                         type: 'answer',
-                        sdp: data.sdp
+                        sdp: data.sdp,
+                        from: 'browser',
+                        timestamp: new Date().toISOString()
                     }));
-                    console.log('📤 Forwarded answer to phone');
+                    console.log('📤 Forwarded SDP answer to phone');
                 }
             }
             else if (data.type === 'candidate') {
-                // Forward ICE candidates
-                const target = data.to;
-                if (target === 'phone' && broadcaster) {
-                    broadcaster.send(JSON.stringify({
+                const target = data.to === 'phone' ? phoneConnection : browserConnection;
+                if (target && target.readyState === 1) {
+                    target.send(JSON.stringify({
                         type: 'candidate',
-                        candidate: data.candidate
+                        candidate: data.candidate,
+                        sdpMid: data.sdpMid,
+                        sdpMLineIndex: data.sdpMLineIndex,
+                        timestamp: new Date().toISOString()
                     }));
-                } else if (target === 'browser') {
-                    viewers.forEach(viewer => {
-                        if (viewer.readyState === WebSocket.OPEN) {
-                            viewer.send(JSON.stringify({
-                                type: 'candidate',
-                                candidate: data.candidate
-                            }));
-                        }
-                    });
+                    console.log('❄️ Forwarded ICE candidate to', data.to);
                 }
             }
         } catch (error) {
-            console.error('❌ Error processing message:', error);
+            console.error('❌ Error processing message:', error.message);
+            ws.send(JSON.stringify({ 
+                type: 'error', 
+                message: 'Invalid message format',
+                error: error.message 
+            }));
         }
     });
     
     ws.on('close', () => {
-        if (ws === broadcaster) {
-            broadcaster = null;
+        console.log('👋 Connection closed');
+        if (ws === phoneConnection) {
+            phoneConnection = null;
             console.log('📱 Phone disconnected');
         }
-        if (viewers.has(ws)) {
-            viewers.delete(ws);
-            console.log('💻 Viewer disconnected. Remaining:', viewers.size);
+        if (ws === browserConnection) {
+            browserConnection = null;
+            console.log('💻 Browser disconnected');
         }
     });
     
     ws.on('error', (error) => {
-        console.error('💥 WebSocket error:', error);
+        console.error('💥 WebSocket error:', error.message);
+    });
+});
+
+// Запускаем сервер на порту 8080 (требование Fly.io)
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`🌐 Health check: http://0.0.0.0:${PORT}/health`);
+    console.log(`🔌 WebSocket: ws://0.0.0.0:${PORT}`);
+    console.log('🟢 Ready for connections...');
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('🛑 Received SIGTERM, shutting down...');
+    server.close(() => {
+        console.log('✅ Server closed');
+        process.exit(0);
     });
 });
